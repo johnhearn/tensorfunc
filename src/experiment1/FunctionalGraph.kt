@@ -1,8 +1,11 @@
-package example1
+package experiment1
 
-object FunctionalGraph {
-    @JvmStatic
-    fun main(args: Array<String>) {
+import org.junit.Test
+import kotlin.test.assertEquals
+
+class FunctionalGraphShould {
+    @Test
+    fun `evaluate basic function`() {
 
         val inputs = constant(2.0)
 
@@ -12,7 +15,7 @@ object FunctionalGraph {
         val graph = sigma(inputs * weights + biases)
 
         val y = graph()
-        println(y) // forward pass
+        assertEquals(Tenser(11.0), y) // forward pass
 
         /*
         val labels = constant(2.5)

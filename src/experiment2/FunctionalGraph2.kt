@@ -1,11 +1,13 @@
-package example2
+package experiment2
 
+import org.junit.Test
 import java.lang.reflect.Method
 import kotlin.reflect.jvm.javaMethod
+import kotlin.test.assertEquals
 
-object FunctionalGraph2 {
-    @JvmStatic
-    fun main(args: Array<String>) {
+class FunctionalGraph2Should {
+    @Test
+    fun `evaluate basic function`() {
 
         val tf = Graph()
 
@@ -14,48 +16,48 @@ object FunctionalGraph2 {
         val weights = tf.get_variable("weights", tf.constant(3.0))
         val biases = tf.get_variable("bias", tf.constant(5.0))
 
-        val graph1 = tf.mult(weights, inputs)
-        println("Result1: " + graph1())
+        val graph1 = tf.mult(weights, inputs) // 3*2
+        assertEquals(Tensor(3.0 * 2.0), graph1())
 
-        val graph2 = tf.mult(weights)
-        println("Result2: " + graph2(inputs))
+        val graph2 = tf.mult(weights) // *3(2)
+        assertEquals(Tensor(2.0 * 3.0), graph2(inputs))
 
-        val graph3 = tf.add(biases)
-        println("Result3: " + graph3(inputs))
+        val graph3 = tf.add(biases) // +5(2)
+        assertEquals(Tensor(2.0 + 5.0), graph3(inputs))
 
-        val graph35 = tf.relu(tf.add(biases))
-        println("Result35: " + graph35(inputs))
+        val graph35 = tf.relu(tf.add(biases)) // ÷3(+5(2))
+        assertEquals(Tensor((2.0 + 5.0) / 3), graph35(inputs))
 
-        val graph6 = tf.add(biases, biases)
-        println("Result6: " + graph6())
+        val graph6 = tf.add(biases, biases) // 5+5
+        assertEquals(Tensor(5.0 + 5.0), graph6())
 
-        val graph4 = tf.add(biases, tf.mult(weights))
-        println("Result4: " + graph4(inputs))
+        val graph4 = tf.add(biases, tf.mult(weights)) // 5 + (*3)(2)
+        assertEquals(Tensor(5.0 + 2.0 * 3.0), graph4(inputs))
 
-        val graph5 = tf.add(tf.mult(weights), biases)
-        println("Result5: " + graph5(inputs))
+        val graph5 = tf.add(tf.mult(weights), biases) // (*3)(2) + 5
+        assertEquals(Tensor(2.0 * 3.0 + 5.0), graph5(inputs))
 
-        val graph7 = tf.relu(tf.add(tf.mult(weights), biases))
-        println("Result7: " + graph7(inputs))
+        val graph7 = tf.relu(tf.add(tf.mult(weights), biases)) // ÷3(*3(2) + 5.0)
+        assertEquals(Tensor((2.0 * 3.0 + 5.0) / 3.0), graph7(inputs))
 
 
         // Second layer
         val weights2 = tf.get_variable("weights2", tf.constant(3.0))
         val biases2 = tf.get_variable("bias2", tf.constant(5.0))
 
-        val graph20 = tf.relu(tf.add(tf.mult(graph7, weights2), biases2))
-        println("Result20: " + graph20(inputs))
+        val graph20 = tf.relu(tf.add(tf.mult(graph7, weights2), biases2)) // ÷3(g7(2.0) * 3.0 + 5.0)
+        assertEquals(Tensor((graph7(inputs).value * 3.0 + 5.0) / 3), graph20(inputs))
 
-        val inputs2 = tf.constant(1.0)
-        println("Result21: " + graph20(inputs2))
+        val inputs2 = tf.constant(1.0) // ÷3(g7(1.0) * 3.0 + 5.0)
+        assertEquals(Tensor(13.0 / 3), graph20(inputs2))
 
         // Third layer
-        val graph30 = tf.relu(tf.add(tf.mult(weights), biases2))
-        println("Result30: " + graph30({ graph20(inputs) }))
+        val graph30 = tf.relu(tf.add(tf.mult(weights), biases2)) // ÷3(16+5)
+        assertEquals(Tensor((16.0 + 5.0) / 3), graph30({ graph20(inputs) }))
 
         // Composite layers
-        val fc = tf.fc(weights, biases, weights2, biases2)
-        println("Result40: " + fc(inputs))
+        val fc = tf.fc(weights, biases, weights2, biases2) // ÷3(÷3(3(2)+5)*3+5)
+        assertEquals(Tensor((3.0 * (3.0 * 2.0 + 5.0) / 3 + 5.0) / 3), fc(inputs))
 
         val graph50 = tf.relua(inputs)
         println("Graph: " + graph50.javaClass.declaredMethods[1])
@@ -64,7 +66,6 @@ object FunctionalGraph2 {
 
         println(tf.del(graph50))
         println(tf.del(graph50)?.invoke(graph20(inputs2)))
-
     }
 }
 
@@ -88,7 +89,7 @@ class Graph {
 
     fun mult(lhs: NullaryOp, rhs: NullaryOp) = { mult(lhs(), rhs()) }
 
-    fun mult(lhs: NullaryOp, rhs: (NullaryOp) -> Tensor) = { x: NullaryOp -> add(lhs(), rhs(x)) }
+    fun mult(lhs: NullaryOp, rhs: (NullaryOp) -> Tensor) = { x: NullaryOp -> mult(lhs(), rhs(x)) }
     fun mult(lhs: (NullaryOp) -> Tensor, rhs: NullaryOp) = { x: NullaryOp -> mult(lhs(x), rhs()) }
 
     fun mult(lhs: Tensor, rhs: Tensor): Tensor = Tensor(lhs.value * rhs.value)
@@ -130,8 +131,8 @@ class Graph {
         val regex = Regex("public final (.*) (.*)\\$(.*)\\$1\\.invoke\\(\\)")
         val (w, rt, ct, m) = regex.find(f.javaClass.declaredMethods[1].toString())!!.groupValues
         val dm = Class.forName(ct).getDeclaredMethod(m, kotlin.jvm.functions.Function0::class.javaObjectType)
-        return {
-            dx: Tensor -> (method(dm)?.invoke(this@Graph, {dx}) as NullaryOp)()
+        return { dx: Tensor ->
+            (method(dm)?.invoke(this@Graph, { dx }) as NullaryOp)()
         }
     }
 
